@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: torio
+message: >-
+  If you use this software in your work, please cite it
+  using the following metadata...
+type: software
+authors:
+  - given-names: Stevens Benavides
+    family-names: DevCheckOG
+    email: foss.stevens.benavides@gmail.com
+repository-code: 'https://github.com/thrushlang/torio'
+url: 'https://github.com/thrushlang'
+abstract: >-
+  The package manager and compiler-controller for the Thrush
+  Programming Language.
+keywords:
+  - Programming Languague
+  - Thrush Programming Language
+license: GPL-3.0
