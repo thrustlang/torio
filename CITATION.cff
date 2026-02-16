@@ -8,12 +8,11 @@ authors:
   - given-names: Stevens Benavides
     family-names: DevCheckOG
     email: foss.stevens.benavides@gmail.com
-repository-code: 'https://github.com/thrushlang/torio'
-url: 'https://github.com/thrushlang'
+repository-code: 'https://github.com/thrustlang/torio'
+url: 'https://github.com/thrustlang'
 abstract: >-
-  The package manager and compiler-controller for the Thrush
-  Programming Language.
+  The package manager and compiler-controller for the Thrust Programming Language.
 keywords:
   - Programming Language
-  - Thrush Programming Language
+  - Thrust Programming Language
 license: GPL-3.0
