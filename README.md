@@ -1,4 +1,4 @@
-<img src= "https://github.com/thrustlang/.github/blob/main/assets/logos/thrushlang-logo.png" alt= "logo" style= "width: 80%; height: 80%;"></img>
+<img src= "https://github.com/thrustlang/.github/blob/main/assets/logos/thrushlang-logo-name.png" alt= "logo" style= "width: 80%; height: 80%;"></img>
 
 # The Thrust Package Manager 
 
