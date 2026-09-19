@@ -114,7 +114,7 @@ foreach ($releaseTag in $tags) {
 Write-Host "Prepared tags:"
 $tags | ForEach-Object { Write-Host "  $_" }
 
-$pushAnswer = Read-Host "Push the release commit and each tag separately to origin? [y/N]"
+$pushAnswer = Read-Host "Push the release? [y/N]"
 
 if ($pushAnswer -match '^[Yy]$') {
     git push origin HEAD

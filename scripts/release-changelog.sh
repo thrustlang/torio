@@ -117,7 +117,7 @@ done
 echo "Prepared tags:"
 printf '  %s\n' "${tags[@]}"
 
-read -rp "Push the release commit and each tag separately to origin? [y/N] " push_answer
+read -rp "Push the release? [y/N] " push_answer
 
 if [[ "$push_answer" =~ ^[Yy]$ ]]; then
     git push origin HEAD

@@ -108,7 +108,7 @@ echo   %tag_2%
 echo   %tag_3%
 echo   %tag_4%
 
-set /p push_answer="Push the release commit and each tag separately to origin? [y/N] "
+set /p push_answer="Push the release? [y/N] "
 
 if /I "%push_answer%"=="y" (
     git push origin HEAD || exit /b 1

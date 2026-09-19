@@ -113,7 +113,7 @@ end
 echo "Prepared tags:"
 printf '  %s\n' $tags
 
-read -P "Push the release commit and each tag separately to origin? [y/N] " push_answer
+read -P "Push the release? [y/N] " push_answer
 
 if string match -rq '^[Yy]$' "$push_answer"
     git push origin HEAD; or exit 1
