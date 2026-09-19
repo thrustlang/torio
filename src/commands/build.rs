@@ -329,12 +329,12 @@ pub fn compile(
         return Err(format!("thrustc failed with status {status}."));
     }
 
-    if !stderr.trim().is_empty() {
-        eprintln!("{}", stderr.trim_end());
-    }
-
     if let Some(handle) = spinner.take() {
         handle.done();
+    }
+
+    if !stderr.trim().is_empty() {
+        eprintln!("{}", stderr.trim_end());
     }
 
     Ok(BuildOutput {

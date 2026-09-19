@@ -53,10 +53,10 @@ pub fn create(name: &str, project_type: crate::config::ProjectType) -> Result<()
         crate::config::ProjectType::Library => "lib.thrust",
     };
     let source: &str = match project_type {
-        crate::config::ProjectType::Executable => "fn main() s32 @public {\n    return 0;\n}\n",
-        crate::config::ProjectType::Library => {
-            "fn doSomenthing() s32 @public {\n    return 0;\n}\n"
+        crate::config::ProjectType::Executable => {
+            "import std::io;\n\nfn main() s32 @public {\n    io::print(\"Hello, World!\\n\");\n    return 0;\n}\n"
         }
+        crate::config::ProjectType::Library => "fn doSomething() s32 @public {\n    return 0;\n}\n",
     };
     let sources_directory: std::path::PathBuf = project_directory.join(sources_name);
     let source_path: std::path::PathBuf = sources_directory.join(source_file_name);

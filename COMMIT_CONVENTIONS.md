@@ -1,64 +1,84 @@
-<img src= "https://github.com/thrustlang/.github/blob/main/assets/logos/thrustlang-logo-name.png" alt= "logo" style= "width: 80%; height: 80%;"></img>
+<img src="https://github.com/thrustlang/.github/blob/main/assets/logos/thrustlang-logo-name.png" alt="logo" style="width: 80%; height: 80%;"></img>
 
-# Torio
+# Torio Commit Conventions
 
-There is a simple guide of standard conventions to follow in order to delivery a good Github commit for the The Thrust Package Manager (**torio**).
+Torio uses [Git Cliff](https://git-cliff.org/) to generate its changelog. Commit titles must follow the patterns configured in [`cliff.toml`](cliff.toml) to be included.
 
-### Title
+## Title
 
-It needs to be detailed. It can be include a lot of technical slang.
-The base of a well designed Github commit title always will be and needs a specific syntax as:
+Use one of these forms:
 
-#### Title - features
+```text
+`feat(scope)` Short description.
+`fix(scope)` Short description.
+```
 
-Following the syntax:
+The backticks preserve the established repository style. Git Cliff removes them before parsing the title. Titles without backticks are also recognized when they start directly with `feat(scope)` or `fix(scope)`.
 
-`feat(...)`
+Types and scopes are case-sensitive. Use lowercase names and write a concise imperative summary after the closing parenthesis.
 
-Valid locations:
+## Types
 
-- `logic` Any location that usually involucrates the logical code in the package manager.
-- `project-visual` Any location that usually involucrates the visual representation or human guide for the compiler available on Github (Example: README.md).
-- `project` Any location that usually involucrates Cargo, Rust Compiler and Github repository changes or the conception of a new part of the compiler (Cargo Workspaces).
+- `feat` introduces or expands behavior.
+- `fix` corrects existing behavior.
 
-Example:
+Other commit types are omitted from the generated changelog by the final catch-all parser in `cliff.toml`.
 
-`feat(project-visual)` I fixed a typo in README.md.
+## Scopes
 
-#### Title - fixes
+| Scope | Use | `feat` changelog group | `fix` changelog group |
+| --- | --- | --- | --- |
+| `cli` | Command-line parsing, commands, flags, and user-facing CLI behavior. | Features | Bug Fixes |
+| `toolchain` | Toolchain discovery, installation, activation, updates, and editor integration. | Features | Bug Fixes |
+| `build` | Project compilation, linking, profiles, artifacts, and build output. | Features | Bug Fixes |
+| `run` | Running compiled projects and forwarding program arguments. | Features | Bug Fixes |
+| `logic` | Shared or general Torio behavior that does not fit a more specific scope. | Features | Bug Fixes |
+| `release` | Release automation, packaging, tags, and publication workflows. | Project | Bug Fixes |
+| `project` | Cargo metadata, repository structure, configuration, and project scaffolding. | Project | Bug Fixes |
+| `project-visual` | README files and other visual or user-facing project documentation. | Documentation | Bug Fixes |
+| `doc` | Technical documentation and guides. | Documentation | Bug Fixes |
 
-Following the syntax:
+Git Cliff has generic fallbacks for unknown `feat(...)` and `fix(...)` scopes, but commits should use one of the scopes above so the changelog retains a normalized scope.
 
-`fix(...)`
+## Examples
 
-Valid locations:
+```text
+`feat(toolchain)` Follow redirects when downloading release assets.
+`fix(build)` Stop the spinner before printing compiler warnings.
+`feat(project)` Generate a Hello World executable template.
+`feat(doc)` Document the toolchain directory layout.
+`fix(cli)` Preserve arguments passed after the run separator.
+```
 
-- `logic` Any location that usually involucrates the logical code in the package manager.
-- `project-visual` Any location that usually involucrates the visual representation or human guide for the compiler available on Github (Example: README.md).
-- `project` Any location that usually involucrates Cargo, Rust Compiler and Github repository changes or the conception of a new part of the compiler (Cargo Workspaces).
+## Combined Titles
 
-Any consecutive location written to the next one needs to be follow for a COMMA character `,`.
+Legacy titles may combine entries inside an outer pair of parentheses:
 
-Example:
+```text
+(feat(toolchain), fix(build)) Short description.
+```
 
-`fix(logic)` I fixed several issues on the package manager commands.
+Avoid this form for new commits. Git Cliff places each commit in only one changelog group, so a combined title is classified by the first matching parser rather than producing separate feature and fix entries. Prefer separate commits when changes require different types or scopes.
 
-#### Title - Combinatory
+## Description
 
-In order to create a well disigned combinatory title, you need to use the following syntax:
+Use the commit body to explain why the change was needed, relevant implementation details, and any important compatibility impact. Keep the title focused on one logical change.
 
-`(feat(...), fix(...))`
+## Changelog Behavior
 
-- It needs to be encapsulated for a pair characters PAREN `()`.
-- Each next feature or fix needs to be followed for a COMMA character `,`. 
+- Recognized commits are grouped as Features, Bug Fixes, Project, or Documentation.
+- Commits are sorted newest first within the generated changelog.
+- Merge commit titles are discarded and the repository's title backticks are removed before parsing.
+- Unrecognized commit titles are excluded.
+- Issue references such as `#123` are linked to the Torio GitHub issue tracker.
 
-### Description
+Git Cliff only treats tags matching these platform release families as changelog versions:
 
-It needs to be concise, short, but detailed in the same time. It can be include a lot of technical slang.
+```text
+torio-x86_64-linux-ubuntu-vX.Y.Z
+torio-x86_64-windows-msvc-vX.Y.Z
+torio-x86_64-macos-vX.Y.Z
+torio-aarch64-macos-vX.Y.Z
+```
 
-
-
-
-
-
-
+Development tags use the same platform names with `-dev` before the version, for example `torio-x86_64-linux-ubuntu-dev-v0.2.0`.

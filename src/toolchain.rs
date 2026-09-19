@@ -16,7 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use isahc::prelude::*;
+use isahc::{config::RedirectPolicy, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
@@ -42,68 +42,8 @@ struct Settings {
 pub fn install(requested_version: Option<&str>) -> Result<semver::Version, String> {
     let platform: String = self::platform()?;
     let releases: Vec<GithubRelease> = self::fetch_releases("thrustlang/thrustc")?;
-    let prefix: String = format!("thrustc-{platform}-v");
-    let mut candidates: Vec<(semver::Version, GithubRelease)> = Vec::new();
-
-    for release in releases {
-        if release.draft || release.prerelease || !release.tag_name.starts_with(&prefix) {
-            continue;
-        }
-
-        let version_text: &str = release.tag_name.trim_start_matches(&prefix);
-        let version: semver::Version = match semver::Version::parse(version_text) {
-            Ok(version) => version,
-            Err(_) => continue,
-        };
-
-        if let Some(requested) = requested_version {
-            let requested: &str = requested.trim_start_matches('v');
-            let requested: semver::Version = semver::Version::parse(requested)
-                .map_err(|error| format!("Invalid toolchain version '{requested}': {error}."))?;
-
-            if requested != version {
-                continue;
-            }
-        }
-
-        let executable_suffix: &str = if cfg!(windows) { ".exe" } else { "" };
-        let compiler_name: String = format!("thrustc{executable_suffix}");
-        let stripped_name: String = format!("thrustc-stripped{executable_suffix}");
-        let lsp_name: String = format!("thrustc_lsp{executable_suffix}");
-        let lsp_stripped_name: String = format!("thrustc_lsp-stripped{executable_suffix}");
-        let has_compiler: bool = release
-            .assets
-            .iter()
-            .any(|asset| asset.name == compiler_name);
-        let has_stripped: bool = release
-            .assets
-            .iter()
-            .any(|asset| asset.name == stripped_name);
-        let has_lsp: bool = release.assets.iter().any(|asset| asset.name == lsp_name);
-        let has_lsp_stripped: bool = release
-            .assets
-            .iter()
-            .any(|asset| asset.name == lsp_stripped_name);
-        let has_vsix: bool = release.assets.iter().any(|asset| {
-            asset.name.starts_with("thrustlang-vscode-") && asset.name.ends_with(".vsix")
-        });
-
-        if has_compiler && has_stripped && has_lsp && has_lsp_stripped && has_vsix {
-            candidates.push((version, release));
-        }
-    }
-
-    candidates.sort_by(|left, right| right.0.cmp(&left.0));
-
-    let Some((version, release)) = candidates.into_iter().next() else {
-        let requested: String =
-            requested_version.map_or_else(|| "latest stable".into(), str::to_string);
-
-        return Err(format!(
-            "No complete {platform} toolchain release was found for {requested}. A release must contain compiler, stripped compiler, LSP, stripped LSP and VSIX assets. Run 'torio toolchain update' after a complete release becomes available."
-        ));
-    };
-
+    let (version, release): (semver::Version, GithubRelease) =
+        self::select_toolchain_release(releases, &platform, requested_version)?;
     let root: std::path::PathBuf = self::root()?;
     let version_directory_name: String = format!("v{version}");
     let compiler_destination: std::path::PathBuf =
@@ -115,10 +55,20 @@ pub fn install(requested_version: Option<&str>) -> Result<semver::Version, Strin
     let stripped_name: String = format!("thrustc-stripped{executable_suffix}");
     let lsp_name: String = format!("thrustc_lsp{executable_suffix}");
     let lsp_stripped_name: String = format!("thrustc_lsp-stripped{executable_suffix}");
+    let has_vsix: bool = std::fs::read_dir(&lsp_destination)
+        .ok()
+        .is_some_and(|entries| {
+            entries.filter_map(Result::ok).any(|entry| {
+                let name: String = entry.file_name().to_string_lossy().to_string();
+
+                name.starts_with("thrustlang-vscode-") && name.ends_with(".vsix")
+            })
+        });
     let existing_complete: bool = compiler_destination.join(&compiler_name).is_file()
         && compiler_destination.join(&stripped_name).is_file()
         && lsp_destination.join(&lsp_name).is_file()
-        && lsp_destination.join(&lsp_stripped_name).is_file();
+        && lsp_destination.join(&lsp_stripped_name).is_file()
+        && has_vsix;
 
     if existing_complete {
         self::activate(&version)?;
@@ -169,7 +119,11 @@ pub fn install(requested_version: Option<&str>) -> Result<semver::Version, Strin
 
         if let Some(destination) = destination {
             println!("Downloading {}...", asset.name);
-            self::download(&asset.browser_download_url, &destination)?;
+
+            if let Err(error) = self::download(&asset.browser_download_url, &destination) {
+                let _ = std::fs::remove_dir_all(&staging);
+                return Err(error);
+            }
         }
     }
 
@@ -194,20 +148,6 @@ pub fn install(requested_version: Option<&str>) -> Result<semver::Version, Strin
                 )
             })?;
         }
-    }
-
-    let compiler_path: std::path::PathBuf = staging_compiler.join(&compiler_name);
-    let lsp_path: std::path::PathBuf = staging_lsp.join(&lsp_name);
-    let compiler_version: String = self::executable_version(&compiler_path)?;
-    let lsp_version: String = self::executable_version(&lsp_path)?;
-    let expected_version: String = version.to_string();
-
-    if compiler_version != expected_version || lsp_version != expected_version {
-        let _ = std::fs::remove_dir_all(&staging);
-
-        return Err(format!(
-            "Downloaded components do not match v{version}: compiler={compiler_version}, lsp={lsp_version}."
-        ));
     }
 
     let compiler_parent: std::path::PathBuf = root.join("compiler");
@@ -236,6 +176,83 @@ pub fn install(requested_version: Option<&str>) -> Result<semver::Version, Strin
 
     println!("Installed and activated Thrust toolchain v{version}.");
     Ok(version)
+}
+
+fn select_toolchain_release(
+    releases: Vec<GithubRelease>,
+    platform: &str,
+    requested_version: Option<&str>,
+) -> Result<(semver::Version, GithubRelease), String> {
+    let prefix: String = format!("thrustc-{platform}-v");
+    let mut candidates: Vec<(semver::Version, GithubRelease)> = Vec::new();
+    let requested_version: Option<semver::Version> = requested_version
+        .map(|requested| {
+            let requested: &str = requested.trim_start_matches('v');
+
+            semver::Version::parse(requested)
+                .map_err(|error| format!("Invalid toolchain version '{requested}': {error}."))
+        })
+        .transpose()?;
+
+    for release in releases {
+        if release.draft || release.prerelease || !release.tag_name.starts_with(&prefix) {
+            continue;
+        }
+
+        let version_text: &str = release.tag_name.trim_start_matches(&prefix);
+        let version: semver::Version = match semver::Version::parse(version_text) {
+            Ok(version) => version,
+            Err(_) => continue,
+        };
+
+        if let Some(requested) = requested_version.as_ref() {
+            if requested != &version {
+                continue;
+            }
+        }
+
+        candidates.push((version, release));
+    }
+
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+
+    let Some((version, release)) = candidates.into_iter().next() else {
+        let requested: String =
+            requested_version.map_or_else(|| "latest stable".into(), |version| version.to_string());
+
+        return Err(format!(
+            "No {platform} toolchain release was found for {requested}."
+        ));
+    };
+
+    let executable_suffix: &str = if cfg!(windows) { ".exe" } else { "" };
+    let compiler_name: String = format!("thrustc{executable_suffix}");
+    let stripped_name: String = format!("thrustc-stripped{executable_suffix}");
+    let lsp_name: String = format!("thrustc_lsp{executable_suffix}");
+    let lsp_stripped_name: String = format!("thrustc_lsp-stripped{executable_suffix}");
+    let required_assets: [String; 4] = [compiler_name, stripped_name, lsp_name, lsp_stripped_name];
+    let mut missing_assets: Vec<String> = required_assets
+        .into_iter()
+        .filter(|required| !release.assets.iter().any(|asset| asset.name == *required))
+        .collect();
+
+    if !release
+        .assets
+        .iter()
+        .any(|asset| asset.name.starts_with("thrustlang-vscode-") && asset.name.ends_with(".vsix"))
+    {
+        missing_assets.push("thrustlang-vscode-*.vsix".into());
+    }
+
+    if !missing_assets.is_empty() {
+        return Err(format!(
+            "Selected {platform} toolchain release '{}' is incomplete; missing assets: {}.",
+            release.tag_name,
+            missing_assets.join(", ")
+        ));
+    }
+
+    Ok((version, release))
 }
 
 pub fn update() -> Result<(), String> {
@@ -832,6 +849,7 @@ fn fetch_releases(repository: &str) -> Result<Vec<GithubRelease>, String> {
 fn download(url: &str, destination: &std::path::Path) -> Result<(), String> {
     let request: isahc::Request<()> = isahc::Request::get(url)
         .header("User-Agent", format!("torio/{}", env!("CARGO_PKG_VERSION")))
+        .redirect_policy(RedirectPolicy::Limit(10))
         .body(())
         .map_err(|error| format!("Cannot create download request: {error}."))?;
     let mut response: isahc::Response<isahc::Body> = request
@@ -949,4 +967,116 @@ fn root() -> Result<std::path::PathBuf, String> {
     }
 
     Err("This operating system is not supported by Torio.".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    fn release(version: &str, assets: &[&str]) -> GithubRelease {
+        GithubRelease {
+            tag_name: format!("thrustc-test-platform-v{version}"),
+            draft: false,
+            prerelease: false,
+            assets: assets
+                .iter()
+                .map(|name| GithubAsset {
+                    name: (*name).into(),
+                    browser_download_url: format!("https://example.com/{name}"),
+                })
+                .collect(),
+        }
+    }
+
+    fn complete_assets(vsix_version: &str) -> Vec<String> {
+        let suffix: &str = if cfg!(windows) { ".exe" } else { "" };
+
+        vec![
+            format!("thrustc{suffix}"),
+            format!("thrustc-stripped{suffix}"),
+            format!("thrustc_lsp{suffix}"),
+            format!("thrustc_lsp-stripped{suffix}"),
+            format!("thrustlang-vscode-{vsix_version}.vsix"),
+        ]
+    }
+
+    #[test]
+    fn selects_latest_platform_tag_and_ignores_asset_versions() {
+        let asset_names: Vec<String> = complete_assets("0.1.2");
+        let assets: Vec<&str> = asset_names.iter().map(String::as_str).collect();
+        let releases: Vec<GithubRelease> =
+            vec![release("0.2.1", &assets), release("0.2.2", &assets)];
+
+        let (version, selected): (semver::Version, GithubRelease) =
+            select_toolchain_release(releases, "test-platform", None).unwrap();
+
+        assert_eq!(version, semver::Version::new(0, 2, 2));
+        assert_eq!(selected.tag_name, "thrustc-test-platform-v0.2.2");
+        assert!(
+            selected
+                .assets
+                .iter()
+                .any(|asset| asset.name == "thrustlang-vscode-0.1.2.vsix")
+        );
+    }
+
+    #[test]
+    fn rejects_incomplete_latest_release_without_falling_back() {
+        let asset_names: Vec<String> = complete_assets("0.2.1");
+        let assets: Vec<&str> = asset_names.iter().map(String::as_str).collect();
+        let suffix: &str = if cfg!(windows) { ".exe" } else { "" };
+        let releases: Vec<GithubRelease> = vec![
+            release("0.2.1", &assets),
+            release(
+                "0.2.2",
+                &[
+                    &format!("thrustc{suffix}"),
+                    &format!("thrustc-stripped{suffix}"),
+                ],
+            ),
+        ];
+
+        let error: String = select_toolchain_release(releases, "test-platform", None).unwrap_err();
+
+        assert!(error.contains("thrustc-test-platform-v0.2.2"));
+        assert!(error.contains("thrustc_lsp"));
+        assert!(error.contains("thrustlang-vscode-*.vsix"));
+    }
+
+    #[test]
+    fn downloads_github_style_redirects() {
+        let listener: std::net::TcpListener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address: std::net::SocketAddr = listener.local_addr().unwrap();
+        let server: std::thread::JoinHandle<()> = std::thread::spawn(move || {
+            for connection in listener.incoming().take(2) {
+                let mut stream: std::net::TcpStream = connection.unwrap();
+                let mut request: [u8; 1024] = [0; 1024];
+                let bytes_read: usize = stream.read(&mut request).unwrap();
+                let request: String = String::from_utf8_lossy(&request[..bytes_read]).into();
+                let response: String = if request.starts_with("GET /asset ") {
+                    format!(
+                        "HTTP/1.1 302 Found\r\nLocation: http://{address}/payload\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
+                } else {
+                    "HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\npayload"
+                        .into()
+                };
+
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        let unique: u128 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let destination: std::path::PathBuf =
+            std::env::temp_dir().join(format!("torio-download-{unique}"));
+
+        download(&format!("http://{address}/asset"), &destination).unwrap();
+        server.join().unwrap();
+
+        assert_eq!(std::fs::read(&destination).unwrap(), b"payload");
+        std::fs::remove_file(destination).unwrap();
+    }
 }
