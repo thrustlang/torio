@@ -22,8 +22,6 @@ Types and scopes are case-sensitive. Use lowercase names and write a concise imp
 - `feat` introduces or expands behavior.
 - `fix` corrects existing behavior.
 
-Other commit types are omitted from the generated changelog by the final catch-all parser in `cliff.toml`.
-
 ## Scopes
 
 | Scope | Use | `feat` changelog group | `fix` changelog group |
