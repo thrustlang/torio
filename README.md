@@ -4,8 +4,19 @@
 
 <img src= "https://github.com/thrustlang/.github/blob/main/assets/standard-text-separator.png" alt= "standard-separator" style= "width: 1hv;"> </img>
 
-The Thrust package manager is the high-level representation of the Thrush compiler, responsible for managing compilation, installation, dependency management, incremental compilation, project creation, and successful compilation of each project.
+Torio is the high-level project and toolchain manager for the Thrust compiler. It installs versioned compiler and LSP components, creates projects, and drives reproducible builds through `thrustc`.
 
-## Installation
+## Commands
 
-~ *Working around...*
+```console
+torio toolchain install [version]
+torio toolchain update
+torio toolchain list
+torio toolchain use <version>
+torio toolchain remove <version>
+torio new <name> [--executable|--lib]
+torio build [--release] [--cc-arg <argument>]
+torio run [--release] [--cc-arg <argument>] [-- <program arguments>]
+```
+
+Projects are configured through `torio.yml`.

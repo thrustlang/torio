@@ -1,0 +1,47 @@
+name: Torio - Release (Windows x86_64 MSVC)
+
+on:
+  push:
+    tags:
+      - 'torio-x86_64-windows-msvc-v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checking Out Tagged Torio
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: Validating Tag Version
+        shell: pwsh
+        run: |
+          $TAG_VERSION = "${env:GITHUB_REF_NAME}" -replace '^.*-v',''
+          $METADATA = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          $PACKAGE_VERSION = ($METADATA.packages | Where-Object { $_.name -eq 'torio' }).version
+          if ($TAG_VERSION -ne $PACKAGE_VERSION) { throw "Tag version $TAG_VERSION does not match package version $PACKAGE_VERSION" }
+          "RELEASE_VERSION=$TAG_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Building Release Binaries
+        shell: pwsh
+        run: |
+          cargo build --release
+          cargo build --profile release-stripped
+          Move-Item target/release-stripped/torio.exe target/release-stripped/torio-stripped.exe
+
+      - name: Publishing Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: changelogs/v${{ env.RELEASE_VERSION }}/README.md
+          files: |
+            target/release/torio.exe
+            target/release-stripped/torio-stripped.exe
+          draft: false
+          fail_on_unmatched_files: true

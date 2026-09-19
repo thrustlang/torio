@@ -1,384 +1,223 @@
-use {
-    super::logging,
-    crate::commands::{
-        project,
-        toolchain::{self, AvailableToolchains, ToolchainSubCommand},
-    },
-    colored::Colorize,
-    logging::LoggingType,
-    std::process,
-};
+/*
 
-pub struct Cli {
-    args: Vec<String>,
+    Copyright (C) 2026  Stevens Benavides
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+use clap::{Args, Parser, Subcommand};
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "torio",
+    version,
+    about = "Thrust project and toolchain manager",
+    long_about = "Torio creates Thrust projects, manages versioned compiler toolchains, builds executables and libraries, and runs compiled programs.",
+    after_help = "Examples:\n  torio new hello\n  torio build --release\n  torio run -- argument\n  torio thrustc --version\n  torio toolchain install"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
 }
 
-impl Cli {
-    pub fn parse(args: Vec<String>) -> Cli {
-        let mut cli: Cli = Self { args };
-        cli._parse();
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Create a new executable or library project.
+    New(NewArguments),
 
-        cli
-    }
+    /// Compile the current project into dist/dev or dist/release.
+    Build(BuildArguments),
 
-    fn _parse(&mut self) {
-        self.args.remove(0);
+    /// Build and run the current executable project.
+    Run(RunArguments),
 
-        if self.args.is_empty() {
-            self.help();
-            return;
+    /// Invoke the compiler from the active toolchain directly.
+    Thrustc(ThrustcArguments),
+
+    /// Install, update, select, list or remove compiler toolchains.
+    Toolchain(ToolchainArguments),
+
+    /// Print the installed Torio version.
+    Version,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  torio new hello\n  torio new math --lib\n  torio new application --executable"
+)]
+struct NewArguments {
+    /// Project name and destination directory.
+    #[arg(value_name = "NAME")]
+    name: String,
+
+    /// Create an executable project. This is the default project type.
+    #[arg(long, conflicts_with = "library")]
+    executable: bool,
+
+    /// Create a dynamic library project under lib/.
+    #[arg(long = "lib")]
+    library: bool,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  torio build\n  torio build --release\n  torio build --cc-arg -lm --cc-arg -lpthread"
+)]
+struct BuildArguments {
+    /// Use the release profile and write the artifact under dist/release/.
+    #[arg(long)]
+    release: bool,
+
+    /// Forward one argument to the C compiler through thrustc -cc-args.
+    #[arg(long = "cc-arg", action = clap::ArgAction::Append, allow_hyphen_values = true)]
+    cc_args: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  torio run\n  torio run --release\n  torio run -- input.txt --verbose\n  torio run --cc-arg -lm -- value"
+)]
+struct RunArguments {
+    /// Use the release profile before running the program.
+    #[arg(long)]
+    release: bool,
+
+    /// Forward one argument to the C compiler through thrustc -cc-args.
+    #[arg(long = "cc-arg", action = clap::ArgAction::Append, allow_hyphen_values = true)]
+    cc_args: Vec<String>,
+
+    /// Arguments passed unchanged to the compiled program after --.
+    #[arg(last = true, allow_hyphen_values = true)]
+    arguments: Vec<std::ffi::OsString>,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    disable_help_flag = true,
+    disable_version_flag = true,
+    trailing_var_arg = true,
+    after_help = "Examples:\n  torio thrustc --help\n  torio thrustc --version\n  torio thrustc -emit llvm-ir main.thrust"
+)]
+struct ThrustcArguments {
+    /// Arguments passed unchanged to thrustc from the active toolchain.
+    #[arg(allow_hyphen_values = true)]
+    arguments: Vec<std::ffi::OsString>,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  torio toolchain install\n  torio toolchain install 0.2.2\n  torio toolchain update\n  torio toolchain list\n  torio toolchain use 0.2.2"
+)]
+struct ToolchainArguments {
+    #[command(subcommand)]
+    command: ToolchainCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum ToolchainCommand {
+    /// Install and activate a complete compiler, LSP and VS Code toolchain.
+    #[command(after_help = "Examples:\n  torio toolchain install\n  torio toolchain install 0.2.2")]
+    Install {
+        /// Exact version to install. The latest stable version is used when omitted.
+        #[arg(value_name = "VERSION")]
+        version: Option<String>,
+    },
+
+    /// Update the active toolchain and Torio to the latest stable releases.
+    #[command(after_help = "Example:\n  torio toolchain update")]
+    Update,
+
+    /// List installed toolchain versions and mark the active version.
+    #[command(after_help = "Example:\n  torio toolchain list")]
+    List,
+
+    /// Activate an already installed toolchain version.
+    #[command(after_help = "Example:\n  torio toolchain use 0.2.2")]
+    Use {
+        /// Installed version to activate.
+        #[arg(value_name = "VERSION")]
+        version: String,
+    },
+
+    /// Remove an installed toolchain version that is not active.
+    #[command(after_help = "Example:\n  torio toolchain remove 0.2.1")]
+    Remove {
+        /// Installed version to remove.
+        #[arg(value_name = "VERSION")]
+        version: String,
+    },
+}
+
+pub fn execute() -> Result<i32, String> {
+    let cli: Cli = Cli::parse();
+
+    match cli.command {
+        Command::New(arguments) => {
+            let project_type: crate::config::ProjectType = if arguments.library {
+                crate::config::ProjectType::Library
+            } else {
+                crate::config::ProjectType::Executable
+            };
+
+            crate::commands::project::create(&arguments.name, project_type)?;
+            Ok(0)
         }
+        Command::Build(arguments) => {
+            let profile: crate::config::BuildProfile = if arguments.release {
+                crate::config::BuildProfile::Release
+            } else {
+                crate::config::BuildProfile::Dev
+            };
 
-        let mut depth: usize = 0;
-
-        while depth != self.args.len() {
-            self.analyze(&self.args[depth].clone(), &mut depth);
+            crate::commands::build::execute(profile, arguments.cc_args)?;
+            Ok(0)
         }
-    }
+        Command::Run(arguments) => {
+            let profile: crate::config::BuildProfile = if arguments.release {
+                crate::config::BuildProfile::Release
+            } else {
+                crate::config::BuildProfile::Dev
+            };
 
-    fn analyze(&mut self, command: &str, index: &mut usize) {
-        let command_trimmed: &str = command.trim();
-
-        match command_trimmed {
-            "help" | "-h" | "--help" => {
-                *index += 1;
-                self.help();
-            }
-
-            "version" | "-v" | "--version" => {
-                *index += 1;
-                println!("{}", env!("CARGO_PKG_VERSION"));
-
-                process::exit(0);
-            }
-
-            "toolchain" => {
-                *index += 1;
-
-                let available_toolchains: [&'static str; 1] =
-                    AvailableToolchains::get_representation();
-
-                *index += 1;
-
-                if !available_toolchains.contains(&self.get_arg(index)) {
-                    self.help_toolchain();
-                }
-
-                match self.get_arg(index) {
-                    "llvm" => {
-                        *index += 1;
-
-                        let commands: [&'static str; 3] = ToolchainSubCommand::get_representation();
-
-                        if !commands.contains(&self.get_arg(index)) {
-                            self.help_toolchain();
-                        }
-
-                        match self.get_arg(index) {
-                            "install" => {
-                                *index += 1;
-                                toolchain::execute(
-                                    AvailableToolchains::LLVM,
-                                    ToolchainSubCommand::Install,
-                                );
-                            }
-
-                            "repair" => {
-                                *index += 1;
-                                toolchain::execute(
-                                    AvailableToolchains::LLVM,
-                                    ToolchainSubCommand::Repair,
-                                );
-                            }
-
-                            "update" => {
-                                *index += 1;
-                                toolchain::execute(
-                                    AvailableToolchains::LLVM,
-                                    ToolchainSubCommand::Update,
-                                );
-                            }
-
-                            _ => {
-                                self.help_toolchain();
-                            }
-                        }
-                    }
-                    _ => {
-                        self.help_toolchain();
-                    }
-                }
-            }
-
-            "new" => {
-                *index += 2;
-
-                let name: &str = self.get_arg(index);
-
-                if name == "new" {
-                    self.help_new();
-                }
-
-                if name.contains(" ") || name.contains("/") || name.contains("\\") {
-                    self.help_new();
-                }
-
-                project::create(name);
-            }
-
-            "add" => {
-                *index += 1;
-            }
-
-            "run" => {
-                *index += 1;
-            }
-
-            "build" => {
-                *index += 1;
-            }
-
-            _ => {
-                *index += 1;
-                self.help();
-            }
+            crate::commands::run::execute(profile, arguments.cc_args, arguments.arguments)
         }
-    }
-
-    fn help(&self) {
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{}\n\n",
-                "Thorium Package Manager"
-                    .custom_color((141, 141, 142))
-                    .bold(),
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} {} {}\n\n",
-                "Usage:".bold(),
-                "thorium".custom_color((141, 141, 142)).bold(),
-                "[command]".bold(),
-            )
-            .as_bytes(),
-        );
-
-        logging::write(logging::OutputIn::Stderr, "Commands:\n\n".bold().as_bytes());
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "help".custom_color((141, 141, 142)).bold(),
-                "Prints this help message.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "version".custom_color((141, 141, 142)).bold(),
-                "Prints the current version.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "toolchain".custom_color((141, 141, 142)).bold(),
-                "Manage a toolchain.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "new".custom_color((141, 141, 142)).bold(),
-                "Creates a new project.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "add".custom_color((141, 141, 142)).bold(),
-                "Adds a dependency.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "run".custom_color((141, 141, 142)).bold(),
-                "Runs the project.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "build".custom_color((141, 141, 142)).bold(),
-                "Builds the project.".bold()
-            )
-            .as_bytes(),
-        );
-
-        process::exit(1);
-    }
-
-    fn help_toolchain(&self) {
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} {} {}\n\n",
-                "Thorium Package Manager"
-                    .custom_color((141, 141, 142))
-                    .bold(),
-                "|".bold().bright_white(),
-                "Toolchains".custom_color((141, 141, 142)).bold(),
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} {} {}\n\n",
-                "Usage:".bold(),
-                "thorium toolchain".custom_color((141, 141, 142)).bold(),
-                "[toolchain] [command]".bold(),
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{}\n {}\n\n",
-                "Available toolchains:".bold(),
-                format_args!(
-                    "{}{}{}{}",
-                    "• LLVM Toolchain".custom_color((141, 141, 142)).bold(),
-                    " (".bold(),
-                    "llvm".bright_white().bold(),
-                    ")".bold(),
-                )
-            )
-            .as_bytes(),
-        );
-
-        logging::write(logging::OutputIn::Stderr, "Commands:\n\n".bold().as_bytes());
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "install".custom_color((141, 141, 142)).bold(),
-                "Installs the specified toolchain.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "repair".custom_color((141, 141, 142)).bold(),
-                "Repairs any broken binaries of the toolchain.".bold()
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} [{}] {}\n",
-                "•".bold(),
-                "update".custom_color((141, 141, 142)).bold(),
-                "Updates the toolchain.".bold()
-            )
-            .as_bytes(),
-        );
-
-        process::exit(1);
-    }
-
-    fn help_new(&self) {
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} {} {}\n\n",
-                "Thorium Package Manager"
-                    .custom_color((141, 141, 142))
-                    .bold(),
-                "|".bold().bright_white(),
-                "Create a new project".custom_color((141, 141, 142)).bold(),
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} {} {}\n",
-                "Usage:".bold(),
-                "thorium new".custom_color((141, 141, 142)).bold(),
-                "[name]".bold(),
-            )
-            .as_bytes(),
-        );
-
-        logging::write(
-            logging::OutputIn::Stderr,
-            format!(
-                "{} {}\n\n",
-                "Note:".bold(),
-                "The identifier cannot contain spaces and non UTF-8 characters."
-                    .custom_color((141, 141, 142))
-                    .bold()
-                    .underline(),
-            )
-            .as_bytes(),
-        );
-
-        process::exit(1);
-    }
-
-    fn get_arg(&self, index: &usize) -> &str {
-        self.args
-            .get(*index)
-            .unwrap_or(self.args.last().unwrap())
-            .trim()
-    }
-
-    fn report_error(&mut self, msg: &str) {
-        logging::log(LoggingType::Error, msg);
-        process::exit(1);
+        Command::Thrustc(arguments) => crate::commands::compiler::execute(arguments.arguments),
+        Command::Toolchain(arguments) => match arguments.command {
+            ToolchainCommand::Install { version } => {
+                crate::toolchain::install(version.as_deref())?;
+                Ok(0)
+            }
+            ToolchainCommand::Update => {
+                crate::toolchain::update()?;
+                Ok(0)
+            }
+            ToolchainCommand::List => {
+                crate::toolchain::list()?;
+                Ok(0)
+            }
+            ToolchainCommand::Use { version } => {
+                crate::toolchain::use_version(&version)?;
+                Ok(0)
+            }
+            ToolchainCommand::Remove { version } => {
+                crate::toolchain::remove(&version)?;
+                Ok(0)
+            }
+        },
+        Command::Version => {
+            println!("{}", env!("CARGO_PKG_VERSION"));
+            Ok(0)
+        }
     }
 }

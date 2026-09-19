@@ -16,7 +16,15 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-pub mod build;
-pub mod compiler;
-pub mod project;
-pub mod run;
+pub fn execute(arguments: Vec<std::ffi::OsString>) -> Result<i32, String> {
+    let version: semver::Version = crate::toolchain::active_version()?.ok_or_else(|| {
+        "No active toolchain was found. Run 'torio toolchain install'.".to_string()
+    })?;
+    let compiler: std::path::PathBuf = crate::toolchain::compiler_path(&version)?;
+    let status: std::process::ExitStatus = std::process::Command::new(&compiler)
+        .args(arguments)
+        .status()
+        .map_err(|error| format!("Cannot execute '{}': {error}.", compiler.display()))?;
+
+    Ok(status.code().unwrap_or(1))
+}
