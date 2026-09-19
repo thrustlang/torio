@@ -5,6 +5,7 @@ All notable changes to Torio are documented here.
 ## [0.1.1] - 2026-09-19
 
 ### Bug Fixes
+- **project**: Fix(project) Fixing release issues ([`ff12a1f`](https://github.com/thrustlang/torio/commit/ff12a1fec5ad5ea0bb4cde77822ea0d43b07ba2c))
 - **project-visual**: Fix(project-visual) Updating the documentation. ([`0eab604`](https://github.com/thrustlang/torio/commit/0eab60401b92ddc48c1780d3645361bfe1d053a8))
 - **logic**: Fix(logic) Fixing the downloader redirections. ([`b523ca8`](https://github.com/thrustlang/torio/commit/b523ca8e3c59039d6291ddf5a10e523b9b77672b))
 
