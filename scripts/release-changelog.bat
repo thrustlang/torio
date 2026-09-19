@@ -108,10 +108,15 @@ echo   %tag_2%
 echo   %tag_3%
 echo   %tag_4%
 
-set /p push_answer="Push the release commit and all tags to origin? [y/N] "
+set /p push_answer="Push the release commit and each tag separately to origin? [y/N] "
 
 if /I "%push_answer%"=="y" (
-    git push --atomic origin HEAD "%tag_1%" "%tag_2%" "%tag_3%" "%tag_4%" || exit /b 1
+    git push origin HEAD || exit /b 1
+
+    for %%t in ("%tag_1%" "%tag_2%" "%tag_3%" "%tag_4%") do (
+        git push origin "%%~t" || exit /b 1
+    )
+
     echo Release commit and tags pushed to origin.
 ) else (
     echo Push skipped. The release commit and tags remain local.

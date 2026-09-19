@@ -114,11 +114,17 @@ foreach ($releaseTag in $tags) {
 Write-Host "Prepared tags:"
 $tags | ForEach-Object { Write-Host "  $_" }
 
-$pushAnswer = Read-Host "Push the release commit and all tags to origin? [y/N]"
+$pushAnswer = Read-Host "Push the release commit and each tag separately to origin? [y/N]"
 
 if ($pushAnswer -match '^[Yy]$') {
-    git push --atomic origin HEAD @tags
-    if ($LASTEXITCODE -ne 0) { throw "Atomic push failed." }
+    git push origin HEAD
+    if ($LASTEXITCODE -ne 0) { throw "Failed to push the release commit." }
+
+    foreach ($releaseTag in $tags) {
+        git push origin $releaseTag
+        if ($LASTEXITCODE -ne 0) { throw "Failed to push tag '$releaseTag'." }
+    }
+
     Write-Host "Release commit and tags pushed to origin."
 } else {
     Write-Host "Push skipped. The release commit and tags remain local."

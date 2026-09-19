@@ -52,6 +52,6 @@ The script:
 3. Updates `[package].version` in `Cargo.toml` and refreshes `Cargo.lock`.
 4. Creates one release commit.
 5. Creates coordinated tags for Linux x86_64, Windows x86_64, macOS x86_64 and macOS AArch64.
-6. Asks before pushing the commit and all tags atomically.
+6. Asks before pushing the commit and then each platform tag separately.
 
-If push is declined, the release commit and tags remain local. The eight GitHub workflows use the canonical changelog as their release body.
+GitHub does not create tag events when more than three tags are pushed at once. Publishing each of the four platform tags separately ensures that every release workflow receives its own `push` event. If push is declined, the release commit and tags remain local. The eight GitHub workflows use the canonical changelog as their release body.

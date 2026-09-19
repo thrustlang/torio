@@ -113,10 +113,15 @@ end
 echo "Prepared tags:"
 printf '  %s\n' $tags
 
-read -P "Push the release commit and all tags to origin? [y/N] " push_answer
+read -P "Push the release commit and each tag separately to origin? [y/N] " push_answer
 
 if string match -rq '^[Yy]$' "$push_answer"
-    git push --atomic origin HEAD $tags; or exit 1
+    git push origin HEAD; or exit 1
+
+    for release_tag in $tags
+        git push origin "$release_tag"; or exit 1
+    end
+
     echo "Release commit and tags pushed to origin."
 else
     echo "Push skipped. The release commit and tags remain local."
