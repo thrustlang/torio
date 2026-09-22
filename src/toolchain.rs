@@ -16,6 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#![allow(clippy::manual_inspect)]
+
 use isahc::{config::RedirectPolicy, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::io::{IsTerminal, Write};

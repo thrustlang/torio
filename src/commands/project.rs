@@ -91,8 +91,9 @@ pub fn create(name: &str, project_type: config::ProjectType) -> Result<(), Strin
     }
 
     println!(
-        "Created Thrust project '{}' with toolchain v{version}.",
+        "Created Thrust project '{}' with compiler toolchain v{version}.",
         project_directory.display()
     );
+
     Ok(())
 }
