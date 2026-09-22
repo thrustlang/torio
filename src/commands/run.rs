@@ -16,15 +16,17 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::{commands, config};
+
 pub fn execute(
-    profile: crate::config::BuildProfile,
+    profile: config::BuildProfile,
     command_line_cc_args: Vec<String>,
     arguments: Vec<std::ffi::OsString>,
 ) -> Result<i32, String> {
-    let output: crate::commands::build::BuildOutput =
-        crate::commands::build::compile(profile, command_line_cc_args)?;
+    let output: commands::build::BuildOutput =
+        commands::build::compile(profile, command_line_cc_args)?;
 
-    if output.project_type != crate::config::ProjectType::Executable {
+    if output.project_type != config::ProjectType::Executable {
         return Err("'torio run' is only available for executable projects.".into());
     }
 

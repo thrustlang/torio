@@ -20,26 +20,25 @@
 
 use std::io::{BufRead, IsTerminal};
 
+use crate::{config, toolchain};
+
 #[derive(Debug)]
 pub struct BuildOutput {
     pub artifact: std::path::PathBuf,
     pub project_root: std::path::PathBuf,
-    pub project_type: crate::config::ProjectType,
+    pub project_type: config::ProjectType,
 }
 
 pub fn compile(
-    profile: crate::config::BuildProfile,
+    profile: config::BuildProfile,
     command_line_cc_args: Vec<String>,
 ) -> Result<BuildOutput, String> {
-    let (project_root, manifest): (std::path::PathBuf, crate::config::Manifest) =
-        crate::config::load()?;
-    let (configured_profile, profile_name): (&crate::config::ProfileConfiguration, &str) =
-        match profile {
-            crate::config::BuildProfile::Dev => (&manifest.profiles.dev, "dev"),
-            crate::config::BuildProfile::Release => (&manifest.profiles.release, "release"),
-        };
-    let compiler: std::path::PathBuf =
-        crate::toolchain::compiler_path(&manifest.toolchain.version)?;
+    let (project_root, manifest): (std::path::PathBuf, config::Manifest) = config::load()?;
+    let (configured_profile, profile_name): (&config::ProfileConfiguration, &str) = match profile {
+        config::BuildProfile::Dev => (&manifest.profiles.dev, "dev"),
+        config::BuildProfile::Release => (&manifest.profiles.release, "release"),
+    };
+    let compiler: std::path::PathBuf = toolchain::compiler_path(&manifest.toolchain.version)?;
     let sources_root: std::path::PathBuf = project_root.join(&manifest.sources.directory);
     let mut pending_directories: Vec<std::path::PathBuf> = vec![sources_root.clone()];
     let mut sources: Vec<std::path::PathBuf> = Vec::new();
@@ -114,17 +113,17 @@ pub fn compile(
         .map_err(|error| format!("Cannot create '{}': {error}.", build_directory.display()))?;
 
     let artifact_name: String = match manifest.project.project_type {
-        crate::config::ProjectType::Executable if cfg!(windows) => {
+        config::ProjectType::Executable if cfg!(windows) => {
             format!("{}.exe", manifest.project.name)
         }
-        crate::config::ProjectType::Executable => manifest.project.name.clone(),
-        crate::config::ProjectType::Library if cfg!(target_os = "windows") => {
+        config::ProjectType::Executable => manifest.project.name.clone(),
+        config::ProjectType::Library if cfg!(target_os = "windows") => {
             format!("{}.dll", manifest.project.name)
         }
-        crate::config::ProjectType::Library if cfg!(target_os = "macos") => {
+        config::ProjectType::Library if cfg!(target_os = "macos") => {
             format!("lib{}.dylib", manifest.project.name)
         }
-        crate::config::ProjectType::Library => format!("lib{}.so", manifest.project.name),
+        config::ProjectType::Library => format!("lib{}.so", manifest.project.name),
     };
     let artifact: std::path::PathBuf = output_directory.join(artifact_name);
 
@@ -153,7 +152,7 @@ pub fn compile(
         }
     }
 
-    if manifest.project.project_type == crate::config::ProjectType::Library {
+    if manifest.project.project_type == config::ProjectType::Library {
         if cfg!(target_os = "macos") {
             cc_args.push("-dynamiclib".into());
         } else {
@@ -199,13 +198,12 @@ pub fn compile(
         compiler_arguments.push("--disable-all-warnings".into());
     }
 
-    if manifest.project.project_type == crate::config::ProjectType::Library && cfg!(unix) {
+    if manifest.project.project_type == config::ProjectType::Library && cfg!(unix) {
         compiler_arguments.push("-reloc-model".into());
         compiler_arguments.push("pic".into());
     }
 
-    let base_compiler_arguments: Vec<String> =
-        crate::config::compiler_arguments(&manifest.compiler);
+    let base_compiler_arguments: Vec<String> = config::compiler_arguments(&manifest.compiler);
 
     compiler_arguments.extend(base_compiler_arguments);
     compiler_arguments.extend(configured_profile.compiler_args.iter().cloned());
@@ -214,25 +212,18 @@ pub fn compile(
         "clang" => {
             compiler_arguments.push("-link-with-clang".into());
 
-            let path: String = manifest
-                .linker
-                .path
-                .as_ref()
-                .map_or_else(|| "clang".into(), |path| path.to_string_lossy().to_string());
+            let path: String = manifest.linker.path;
 
             compiler_arguments.push(path);
         }
         "gcc" => {
             compiler_arguments.push("-link-with-gcc".into());
 
-            let path: String = manifest
-                .linker
-                .path
-                .as_ref()
-                .map_or_else(|| "gcc".into(), |path| path.to_string_lossy().to_string());
+            let path: String = manifest.linker.path;
 
             compiler_arguments.push(path);
         }
+
         _ => {}
     }
 
@@ -345,7 +336,7 @@ pub fn compile(
 }
 
 pub fn execute(
-    profile: crate::config::BuildProfile,
+    profile: config::BuildProfile,
     command_line_cc_args: Vec<String>,
 ) -> Result<(), String> {
     let output: BuildOutput = self::compile(profile, command_line_cc_args)?;

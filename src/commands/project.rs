@@ -16,7 +16,9 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-pub fn create(name: &str, project_type: crate::config::ProjectType) -> Result<(), String> {
+use crate::{config, toolchain};
+
+pub fn create(name: &str, project_type: config::ProjectType) -> Result<(), String> {
     let valid_name: bool = !name.is_empty()
         && name.chars().all(|character| {
             character.is_ascii_alphanumeric() || character == '_' || character == '-'
@@ -39,29 +41,29 @@ pub fn create(name: &str, project_type: crate::config::ProjectType) -> Result<()
         ));
     }
 
-    let version: semver::Version = match crate::toolchain::active_version()? {
+    let version: semver::Version = match toolchain::active_version()? {
         Some(version) => version,
-        None => crate::toolchain::install(None)?,
+        None => toolchain::install(None)?,
     };
 
     let sources_name: &str = match project_type {
-        crate::config::ProjectType::Executable => "src",
-        crate::config::ProjectType::Library => "lib",
+        config::ProjectType::Executable => "src",
+        config::ProjectType::Library => "lib",
     };
     let source_file_name: &str = match project_type {
-        crate::config::ProjectType::Executable => "main.thrust",
-        crate::config::ProjectType::Library => "lib.thrust",
+        config::ProjectType::Executable => "main.thrust",
+        config::ProjectType::Library => "lib.thrust",
     };
     let source: &str = match project_type {
-        crate::config::ProjectType::Executable => {
+        config::ProjectType::Executable => {
             "import std::io;\n\nfn main() s32 @public {\n    io::print(\"Hello, World!\\n\");\n    return 0;\n}\n"
         }
-        crate::config::ProjectType::Library => "fn doSomething() s32 @public {\n    return 0;\n}\n",
+        config::ProjectType::Library => "fn doSomething() s32 @public {\n    return 0;\n}\n",
     };
     let sources_directory: std::path::PathBuf = project_directory.join(sources_name);
     let source_path: std::path::PathBuf = sources_directory.join(source_file_name);
     let manifest_path: std::path::PathBuf = project_directory.join("torio.yml");
-    let manifest: String = crate::config::template(name, &version, project_type);
+    let manifest: String = config::template(name, &version, project_type);
 
     std::fs::create_dir_all(&sources_directory).map_err(|error| {
         format!(

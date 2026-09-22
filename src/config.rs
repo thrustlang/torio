@@ -97,7 +97,7 @@ pub struct LinkerConfiguration {
     #[serde(default)]
     pub compiler: String,
     #[serde(default)]
-    pub path: Option<std::path::PathBuf>,
+    pub path: String,
     #[serde(default)]
     pub cc_args: Vec<String>,
 }
@@ -146,7 +146,6 @@ toolchain:
 sources:
   directory: {sources_directory}
 
-# Each category accepts thrustc flags as individual YAML list entries.
 compiler:
   warnings: false
   general: [] # Example: ["-mode", "stable", "-abi", "system-v"]
@@ -160,17 +159,15 @@ compiler:
   experimental: [] # Example: ["-mode", "unstable"]
   extra-args: [] # Example: ["--disable-frame-pointer"]
 
-# These values are forwarded to thrustc through -cc-args.
-# Example: ["-lm", "-lpthread", "-L/usr/local/lib"]
 linker:
   compiler: auto # auto | clang | gcc
-  path: null # Example: /usr/bin/clang
+  path: null # Example: "/usr/bin/clang"
   cc-args: [] # Example: ["-lm", "-lpthread", "-L/usr/local/lib"]
 
 # Project configuration above is shared. Profiles only override build behavior.
 profiles:
   dev:
-    optimization: O0
+    optimization: O0 # Example: O1, O2, O3, Oz
     debug: true
     compiler-args: [] # Example: ["-cpu", "haswell"]
     cc-args: [] # Example: ["-lm"]

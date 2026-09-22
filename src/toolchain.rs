@@ -18,7 +18,7 @@
 
 use isahc::{config::RedirectPolicy, prelude::*};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
@@ -41,9 +41,40 @@ struct Settings {
 
 pub fn install(requested_version: Option<&str>) -> Result<semver::Version, String> {
     let platform: String = self::platform()?;
-    let releases: Vec<GithubRelease> = self::fetch_releases("thrustlang/thrustc")?;
+    let interactive: bool = std::io::stdout().is_terminal();
+    let mut spinner: Option<terminal_spinners::SpinnerHandle> = if interactive {
+        Some(
+            terminal_spinners::SpinnerBuilder::new()
+                .spinner(&terminal_spinners::DOTS)
+                .text(" Checking for available Thrust toolchain releases")
+                .start(),
+        )
+    } else {
+        None
+    };
+    let releases: Vec<GithubRelease> =
+        self::fetch_releases("thrustlang/thrustc").map_err(|error| {
+            if let Some(handle) = spinner.take() {
+                handle.error();
+            }
+
+            error
+        })?;
     let (version, release): (semver::Version, GithubRelease) =
-        self::select_toolchain_release(releases, &platform, requested_version)?;
+        self::select_toolchain_release(releases, &platform, requested_version).map_err(
+            |error| {
+                if let Some(handle) = spinner.take() {
+                    handle.error();
+                }
+
+                error
+            },
+        )?;
+
+    if let Some(handle) = spinner.take() {
+        handle.done();
+    }
+
     let root: std::path::PathBuf = self::root()?;
     let version_directory_name: String = format!("v{version}");
     let compiler_destination: std::path::PathBuf =
@@ -104,6 +135,18 @@ pub fn install(requested_version: Option<&str>) -> Result<semver::Version, Strin
     std::fs::create_dir_all(&staging_lsp)
         .map_err(|error| format!("Cannot create installation staging directory: {error}."))?;
 
+    let interactive: bool = std::io::stdout().is_terminal();
+    let mut spinner: Option<terminal_spinners::SpinnerHandle> = if interactive {
+        Some(
+            terminal_spinners::SpinnerBuilder::new()
+                .spinner(&terminal_spinners::DOTS)
+                .text(format!(" Downloading Thrust toolchain v{version}"))
+                .start(),
+        )
+    } else {
+        None
+    };
+
     for asset in release.assets.iter() {
         let destination: Option<std::path::PathBuf> =
             if asset.name == compiler_name || asset.name == stripped_name {
@@ -118,13 +161,25 @@ pub fn install(requested_version: Option<&str>) -> Result<semver::Version, Strin
             };
 
         if let Some(destination) = destination {
-            println!("Downloading {}...", asset.name);
+            if let Some(handle) = spinner.as_ref() {
+                handle.text(format!(" Downloading {}", asset.name));
+            } else {
+                println!("Downloading {}...", asset.name);
+            }
 
             if let Err(error) = self::download(&asset.browser_download_url, &destination) {
+                if let Some(handle) = spinner.take() {
+                    handle.error();
+                }
+
                 let _ = std::fs::remove_dir_all(&staging);
                 return Err(error);
             }
         }
+    }
+
+    if let Some(handle) = spinner.take() {
+        handle.done();
     }
 
     #[cfg(unix)]
@@ -488,7 +543,30 @@ fn update_torio() -> Result<(), String> {
             destination_directory.display()
         )
     })?;
-    self::download(&asset.browser_download_url, &destination)?;
+
+    let interactive: bool = std::io::stdout().is_terminal();
+    let spinner: Option<terminal_spinners::SpinnerHandle> = if interactive {
+        Some(
+            terminal_spinners::SpinnerBuilder::new()
+                .spinner(&terminal_spinners::DOTS)
+                .text(format!(" Downloading Torio v{version}"))
+                .start(),
+        )
+    } else {
+        None
+    };
+    let download_result: Result<(), String> =
+        self::download(&asset.browser_download_url, &destination);
+
+    if let Some(handle) = spinner {
+        if download_result.is_ok() {
+            handle.done();
+        } else {
+            handle.error();
+        }
+    }
+
+    download_result?;
 
     #[cfg(unix)]
     {

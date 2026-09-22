@@ -22,7 +22,7 @@ use clap::{Args, Parser, Subcommand};
 #[command(
     name = "torio",
     version,
-    about = "Thrust project and toolchain manager",
+    about = "Thrust Programming Language toolchain and project manager",
     long_about = "Torio creates Thrust projects, manages versioned compiler toolchains, builds executables and libraries, and runs compiled programs.",
     after_help = "Examples:\n  torio new hello\n  torio build --release\n  torio run -- argument\n  torio thrustc --version\n  torio toolchain install"
 )]
