@@ -20,3 +20,14 @@ torio run [--release] [--cc-arg <argument>] [-- <program arguments>]
 ```
 
 Projects are configured through `torio.yml`.
+
+## Releases
+
+**Torio** is released across multiple systems and architectures.
+
+Supported operating systems and architectures:
+
+- Linux x64 (GNU)
+- Windows x64 (MSVC)
+- MacOS aarch64 (Apple Silicon)
+- MacOS x64 (Intel)
