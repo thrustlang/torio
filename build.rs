@@ -30,7 +30,7 @@ fn main() {
         res.set("OriginalFilename", "torio.exe");
         res.set("LegalCopyright", "Copyright © 2026 Stevens Benavides");
         res.set("CompanyName", "Thrust Programming Language");
-        res.set_version_info(winres::VersionInfo::PRODUCTVERSION, version_hex); // v1.0.0.0
+        res.set_version_info(winres::VersionInfo::PRODUCTVERSION, version_hex);
 
         res.set_manifest(
             r#"
