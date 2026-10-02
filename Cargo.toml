@@ -14,6 +14,11 @@ authors = [
 homepage = "https://github.com/thrustlang/torio"
 repository = "https://github.com/thrustlang/torio"
 
+build = "build.rs"
+
+[build-dependencies]
+winres = "0.1.12"
+
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
 isahc = "1.7.2"
