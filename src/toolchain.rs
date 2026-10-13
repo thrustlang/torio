@@ -39,6 +39,41 @@ struct GithubAsset {
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct Settings {
     active: Option<String>,
+    #[serde(default, rename = "compiler-variant")]
+    compiler_variant: crate::variant::CompilerVariant,
+}
+
+impl Settings {
+    fn new(active: Option<String>, compiler_variant: crate::variant::CompilerVariant) -> Self {
+        Self {
+            active,
+            compiler_variant,
+        }
+    }
+}
+
+impl Settings {
+    #[inline]
+    fn get_active(&self) -> Option<&String> {
+        self.active.as_ref()
+    }
+
+    #[inline]
+    fn get_compiler_variant(&self) -> crate::variant::CompilerVariant {
+        self.compiler_variant
+    }
+}
+
+impl Settings {
+    #[inline]
+    fn set_active(&mut self, active: Option<String>) {
+        self.active = active;
+    }
+
+    #[inline]
+    fn set_compiler_variant(&mut self, compiler_variant: crate::variant::CompilerVariant) {
+        self.compiler_variant = compiler_variant;
+    }
 }
 
 pub fn install(requested_version: Option<&str>) -> Result<semver::Version, String> {
@@ -346,7 +381,9 @@ pub fn use_version(version: &str) -> Result<(), String> {
 
     self::activate(&version)?;
     self::install_editors(&lsp);
+
     println!("Using Thrust toolchain v{version}.");
+
     Ok(())
 }
 
@@ -389,6 +426,7 @@ pub fn list() -> Result<(), String> {
     let root: std::path::PathBuf = self::root()?;
     let compiler_root: std::path::PathBuf = root.join("compiler");
     let active: Option<semver::Version> = self::active_version()?;
+    let compiler_variant: crate::variant::CompilerVariant = self::compiler_variant()?;
     let mut versions: Vec<semver::Version> = Vec::new();
 
     if compiler_root.is_dir() {
@@ -410,6 +448,7 @@ pub fn list() -> Result<(), String> {
 
     if versions.is_empty() {
         println!("No Thrust toolchains are installed.");
+
         return Ok(());
     }
 
@@ -420,7 +459,11 @@ pub fn list() -> Result<(), String> {
             " "
         };
 
-        println!("{marker} v{version}");
+        if active.as_ref() == Some(&version) {
+            println!("{marker} v{version} ({compiler_variant})");
+        } else {
+            println!("{marker} v{version}");
+        }
     }
 
     Ok(())
@@ -459,13 +502,16 @@ pub fn dispatch_shim(name: &str) -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
-pub fn compiler_path(version: &semver::Version) -> Result<std::path::PathBuf, String> {
+pub fn compiler_path(
+    version: &semver::Version,
+    variant: crate::variant::CompilerVariant,
+) -> Result<std::path::PathBuf, String> {
     let root: std::path::PathBuf = self::root()?;
     let suffix: &str = if cfg!(windows) { ".exe" } else { "" };
     let path: std::path::PathBuf = root
         .join("compiler")
         .join(format!("v{version}"))
-        .join(format!("thrustc{suffix}"));
+        .join(format!("{}{suffix}", variant.binary_stem()));
 
     if !path.is_file() {
         let active: Option<semver::Version> = self::active_version()?;
@@ -486,9 +532,9 @@ pub fn compiler_path(version: &semver::Version) -> Result<std::path::PathBuf, St
 pub fn active_version() -> Result<Option<semver::Version>, String> {
     let settings: Settings = self::read_settings()?;
 
-    match settings.active {
+    match settings.get_active() {
         Some(version) => {
-            let version: semver::Version = semver::Version::parse(&version)
+            let version: semver::Version = semver::Version::parse(version)
                 .map_err(|error| format!("Invalid active toolchain version: {error}."))?;
 
             Ok(Some(version))
@@ -726,24 +772,9 @@ fn activate(version: &semver::Version) -> Result<(), String> {
 
     let mut settings: Settings = self::read_settings()?;
 
-    settings.active = Some(version.to_string());
+    settings.set_active(Some(version.to_string()));
 
-    let content: String = serde_yaml::to_string(&settings)
-        .map_err(|error| format!("Cannot serialize toolchain settings: {error}."))?;
-    let settings_path: std::path::PathBuf = root.join("settings.yml");
-    let temporary_settings: std::path::PathBuf = root.join("settings.yml.tmp");
-
-    std::fs::write(&temporary_settings, content)
-        .map_err(|error| format!("Cannot write '{}': {error}.", temporary_settings.display()))?;
-
-    #[cfg(windows)]
-    if settings_path.exists() {
-        std::fs::remove_file(&settings_path)
-            .map_err(|error| format!("Cannot replace '{}': {error}.", settings_path.display()))?;
-    }
-
-    std::fs::rename(&temporary_settings, &settings_path)
-        .map_err(|error| format!("Cannot activate toolchain v{version}: {error}."))?;
+    self::write_settings(&settings)?;
 
     Ok(())
 }
@@ -950,6 +981,7 @@ fn download(url: &str, destination: &std::path::Path) -> Result<(), String> {
         .map_err(|error| format!("Cannot write '{}': {error}.", destination.display()))?;
     file.flush()
         .map_err(|error| format!("Cannot flush '{}': {error}.", destination.display()))?;
+
     Ok(())
 }
 
@@ -980,12 +1012,37 @@ fn executable_version(path: &std::path::Path) -> Result<String, String> {
     Ok(version.trim_start_matches('v').to_string())
 }
 
+fn write_settings(settings: &Settings) -> Result<(), String> {
+    let root: std::path::PathBuf = self::root()?;
+    let content: String = serde_yaml::to_string(settings)
+        .map_err(|error| format!("Cannot serialize toolchain settings: {error}."))?;
+    let settings_path: std::path::PathBuf = root.join("settings.yml");
+    let temporary_settings: std::path::PathBuf = root.join("settings.yml.tmp");
+
+    std::fs::write(&temporary_settings, content)
+        .map_err(|error| format!("Cannot write '{}': {error}.", temporary_settings.display()))?;
+
+    #[cfg(windows)]
+    if settings_path.exists() {
+        std::fs::remove_file(&settings_path)
+            .map_err(|error| format!("Cannot replace '{}': {error}.", settings_path.display()))?;
+    }
+
+    std::fs::rename(&temporary_settings, &settings_path)
+        .map_err(|error| format!("Cannot update '{}': {error}.", settings_path.display()))?;
+
+    Ok(())
+}
+
 fn read_settings() -> Result<Settings, String> {
     let root: std::path::PathBuf = self::root()?;
     let path: std::path::PathBuf = root.join("settings.yml");
 
     if !path.is_file() {
-        return Ok(Settings::default());
+        return Ok(Settings::new(
+            None,
+            crate::variant::CompilerVariant::default(),
+        ));
     }
 
     let content: String = std::fs::read_to_string(&path)
@@ -1031,7 +1088,7 @@ fn platform() -> Result<String, String> {
     }
 }
 
-fn root() -> Result<std::path::PathBuf, String> {
+pub fn root() -> Result<std::path::PathBuf, String> {
     if cfg!(windows) {
         let app_data: String = std::env::var("APPDATA")
             .map_err(|_| "The APPDATA environment variable is required.".to_string())?;
@@ -1047,6 +1104,22 @@ fn root() -> Result<std::path::PathBuf, String> {
     }
 
     Err("This operating system is not supported by Torio.".into())
+}
+
+#[inline]
+pub fn compiler_variant() -> Result<crate::variant::CompilerVariant, String> {
+    let settings: Settings = self::read_settings()?;
+
+    Ok(settings.get_compiler_variant())
+}
+
+#[inline]
+pub fn set_compiler_variant(variant: crate::variant::CompilerVariant) -> Result<(), String> {
+    let mut settings: Settings = self::read_settings()?;
+
+    settings.set_compiler_variant(variant);
+
+    self::write_settings(&settings)
 }
 
 #[cfg(test)]

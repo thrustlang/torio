@@ -20,6 +20,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod toolchain;
+pub mod variant;
 
 fn main() {
     let executable: std::path::PathBuf = std::env::current_exe().unwrap_or_default();

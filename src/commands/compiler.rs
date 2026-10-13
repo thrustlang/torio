@@ -16,11 +16,19 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-pub fn execute(arguments: Vec<std::ffi::OsString>) -> Result<i32, String> {
+use crate::variant::CompilerVariant;
+
+pub fn execute(
+    arguments: Vec<std::ffi::OsString>,
+    requested_variant: Option<CompilerVariant>,
+) -> Result<i32, String> {
     let version: semver::Version = crate::toolchain::active_version()?.ok_or_else(|| {
         "No active toolchain was found. Run 'torio toolchain install'.".to_string()
     })?;
-    let compiler: std::path::PathBuf = crate::toolchain::compiler_path(&version)?;
+    let compiler_variant: CompilerVariant =
+        requested_variant.unwrap_or(crate::toolchain::compiler_variant()?);
+    let compiler: std::path::PathBuf =
+        crate::toolchain::compiler_path(&version, compiler_variant)?;
     let status: std::process::ExitStatus = std::process::Command::new(&compiler)
         .args(arguments)
         .status()

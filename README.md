@@ -14,9 +14,11 @@ torio toolchain update
 torio toolchain list
 torio toolchain use <version>
 torio toolchain remove <version>
+torio toolchain compiler [release|stripped]
 torio new <name> [--executable|--lib]
-torio build [--release] [--cc-arg <argument>]
-torio run [--release] [--cc-arg <argument>] [-- <program arguments>]
+torio build [--release] [--compiler <variant>] [--cc-arg <argument>]
+torio run [--release] [--compiler <variant>] [--cc-arg <argument>] [-- <program arguments>]
+torio thrustc-stripped [arguments]
 ```
 
 Projects are configured through `torio.yml`.

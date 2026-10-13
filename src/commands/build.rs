@@ -20,25 +20,93 @@
 
 use std::io::{BufRead, IsTerminal};
 
+use crate::variant::CompilerVariant;
 use crate::{config, toolchain};
 
 #[derive(Debug)]
 pub struct BuildOutput {
-    pub artifact: std::path::PathBuf,
-    pub project_root: std::path::PathBuf,
-    pub project_type: config::ProjectType,
+    artifact: std::path::PathBuf,
+    project_root: std::path::PathBuf,
+    project_type: config::ProjectType,
+}
+
+impl BuildOutput {
+    pub fn new(
+        artifact: std::path::PathBuf,
+        project_root: std::path::PathBuf,
+        project_type: config::ProjectType,
+    ) -> Self {
+        Self {
+            artifact,
+            project_root,
+            project_type,
+        }
+    }
+}
+
+impl BuildOutput {
+    #[inline]
+    pub fn get_artifact(&self) -> &std::path::PathBuf {
+        &self.artifact
+    }
+
+    #[inline]
+    pub fn get_project_root(&self) -> &std::path::PathBuf {
+        &self.project_root
+    }
+
+    #[inline]
+    pub fn get_project_type(&self) -> config::ProjectType {
+        self.project_type
+    }
+}
+
+impl BuildOutput {
+    #[inline]
+    pub fn get_artifact_mut(&mut self) -> &mut std::path::PathBuf {
+        &mut self.artifact
+    }
+
+    #[inline]
+    pub fn get_project_root_mut(&mut self) -> &mut std::path::PathBuf {
+        &mut self.project_root
+    }
+
+    #[inline]
+    pub fn get_project_type_mut(&mut self) -> &mut config::ProjectType {
+        &mut self.project_type
+    }
+}
+
+impl BuildOutput {
+    pub fn set_artifact(&mut self, artifact: std::path::PathBuf) {
+        self.artifact = artifact;
+    }
+
+    pub fn set_project_root(&mut self, project_root: std::path::PathBuf) {
+        self.project_root = project_root;
+    }
+
+    pub fn set_project_type(&mut self, project_type: config::ProjectType) {
+        self.project_type = project_type;
+    }
 }
 
 pub fn compile(
     profile: config::BuildProfile,
     command_line_cc_args: Vec<String>,
+    command_line_compiler_variant: Option<CompilerVariant>,
 ) -> Result<BuildOutput, String> {
     let (project_root, manifest): (std::path::PathBuf, config::Manifest) = config::load()?;
     let (configured_profile, profile_name): (&config::ProfileConfiguration, &str) = match profile {
         config::BuildProfile::Dev => (&manifest.profiles.dev, "dev"),
         config::BuildProfile::Release => (&manifest.profiles.release, "release"),
     };
-    let compiler: std::path::PathBuf = toolchain::compiler_path(&manifest.toolchain.version)?;
+    let compiler_variant: CompilerVariant = command_line_compiler_variant
+        .or(manifest.toolchain.get_compiler_variant())
+        .unwrap_or(toolchain::compiler_variant()?);
+    let compiler: std::path::PathBuf =
+        toolchain::compiler_path(&manifest.toolchain.version, compiler_variant)?;
     let sources_root: std::path::PathBuf = project_root.join(&manifest.sources.directory);
     let mut pending_directories: Vec<std::path::PathBuf> = vec![sources_root.clone()];
     let mut sources: Vec<std::path::PathBuf> = Vec::new();
@@ -259,6 +327,7 @@ pub fn compile(
             let mut content: String = String::new();
 
             std::io::Read::read_to_string(&mut reader, &mut content)?;
+
             Ok(content)
         });
     let interactive: bool = std::io::stdout().is_terminal();
@@ -328,19 +397,22 @@ pub fn compile(
         eprintln!("{}", stderr.trim_end());
     }
 
-    Ok(BuildOutput {
+    Ok(BuildOutput::new(
         artifact,
         project_root,
-        project_type: manifest.project.project_type,
-    })
+        manifest.project.project_type,
+    ))
 }
 
 pub fn execute(
     profile: config::BuildProfile,
     command_line_cc_args: Vec<String>,
+    command_line_compiler_variant: Option<CompilerVariant>,
 ) -> Result<(), String> {
-    let output: BuildOutput = self::compile(profile, command_line_cc_args)?;
+    let output: BuildOutput =
+        self::compile(profile, command_line_cc_args, command_line_compiler_variant)?;
 
-    println!("Built {}", output.artifact.display());
+    println!("Built {}", output.get_artifact().display());
+
     Ok(())
 }

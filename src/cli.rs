@@ -18,6 +18,8 @@
 
 use clap::{Args, Parser, Subcommand};
 
+use crate::variant::CompilerVariant;
+
 #[derive(Debug, Parser)]
 #[command(
     name = "torio",
@@ -44,6 +46,9 @@ enum Command {
 
     /// Invoke the compiler from the active toolchain directly.
     Thrustc(ThrustcArguments),
+
+    /// Invoke the stripped compiler from the active toolchain directly.
+    ThrustcStripped(ThrustcArguments),
 
     /// Install, update, select, list or remove compiler toolchains.
     Toolchain(ToolchainArguments),
@@ -72,7 +77,7 @@ struct NewArguments {
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Examples:\n  torio build\n  torio build --release\n  torio build --cc-arg -lm --cc-arg -lpthread"
+    after_help = "Examples:\n  torio build\n  torio build --release\n  torio build --cc-arg -lm --cc-arg -lpthread\n  torio build --compiler stripped"
 )]
 struct BuildArguments {
     /// Use the release profile and write the artifact under dist/release/.
@@ -82,11 +87,33 @@ struct BuildArguments {
     /// Forward one argument to the C compiler through thrustc -cc-args.
     #[arg(long = "cc-arg", action = clap::ArgAction::Append, allow_hyphen_values = true)]
     cc_args: Vec<String>,
+
+    /// Compiler binary variant to use: release or stripped.
+    #[arg(long = "compiler", value_name = "VARIANT")]
+    compiler: Option<CompilerVariant>,
+}
+
+impl BuildArguments {
+    fn get_compiler(&self) -> Option<CompilerVariant> {
+        self.compiler
+    }
+}
+
+impl BuildArguments {
+    fn get_compiler_mut(&mut self) -> &mut Option<CompilerVariant> {
+        &mut self.compiler
+    }
+}
+
+impl BuildArguments {
+    fn set_compiler(&mut self, compiler: Option<CompilerVariant>) {
+        self.compiler = compiler;
+    }
 }
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Examples:\n  torio run\n  torio run --release\n  torio run -- input.txt --verbose\n  torio run --cc-arg -lm -- value"
+    after_help = "Examples:\n  torio run\n  torio run --release\n  torio run -- input.txt --verbose\n  torio run --compiler stripped -- value"
 )]
 struct RunArguments {
     /// Use the release profile before running the program.
@@ -97,9 +124,31 @@ struct RunArguments {
     #[arg(long = "cc-arg", action = clap::ArgAction::Append, allow_hyphen_values = true)]
     cc_args: Vec<String>,
 
+    /// Compiler binary variant to use: release or stripped.
+    #[arg(long = "compiler", value_name = "VARIANT")]
+    compiler: Option<CompilerVariant>,
+
     /// Arguments passed unchanged to the compiled program after --.
     #[arg(last = true, allow_hyphen_values = true)]
     arguments: Vec<std::ffi::OsString>,
+}
+
+impl RunArguments {
+    fn get_compiler(&self) -> Option<CompilerVariant> {
+        self.compiler
+    }
+}
+
+impl RunArguments {
+    fn get_compiler_mut(&mut self) -> &mut Option<CompilerVariant> {
+        &mut self.compiler
+    }
+}
+
+impl RunArguments {
+    fn set_compiler(&mut self, compiler: Option<CompilerVariant>) {
+        self.compiler = compiler;
+    }
 }
 
 #[derive(Debug, Args)]
@@ -157,6 +206,16 @@ enum ToolchainCommand {
         #[arg(value_name = "VERSION")]
         version: String,
     },
+
+    /// Show or switch the compiler binary variant between release and stripped.
+    #[command(
+        after_help = "Examples:\n  torio toolchain compiler\n  torio toolchain compiler release\n  torio toolchain compiler stripped"
+    )]
+    Compiler {
+        /// Variant to activate. The current variant is printed when omitted.
+        #[arg(value_name = "VARIANT")]
+        variant: Option<CompilerVariant>,
+    },
 }
 
 pub fn execute() -> Result<i32, String> {
@@ -180,7 +239,9 @@ pub fn execute() -> Result<i32, String> {
                 crate::config::BuildProfile::Dev
             };
 
-            crate::commands::build::execute(profile, arguments.cc_args)?;
+            let compiler: Option<CompilerVariant> = arguments.get_compiler();
+
+            crate::commands::build::execute(profile, arguments.cc_args, compiler)?;
             Ok(0)
         }
         Command::Run(arguments) => {
@@ -189,10 +250,21 @@ pub fn execute() -> Result<i32, String> {
             } else {
                 crate::config::BuildProfile::Dev
             };
+            let compiler: Option<CompilerVariant> = arguments.get_compiler();
 
-            crate::commands::run::execute(profile, arguments.cc_args, arguments.arguments)
+            crate::commands::run::execute(
+                profile,
+                arguments.cc_args,
+                compiler,
+                arguments.arguments,
+            )
         }
-        Command::Thrustc(arguments) => crate::commands::compiler::execute(arguments.arguments),
+        Command::Thrustc(arguments) => {
+            crate::commands::compiler::execute(arguments.arguments, None)
+        }
+        Command::ThrustcStripped(arguments) => {
+            crate::commands::compiler::execute(arguments.arguments, Some(CompilerVariant::Stripped))
+        }
         Command::Toolchain(arguments) => match arguments.command {
             ToolchainCommand::Install { version } => {
                 crate::toolchain::install(version.as_deref())?;
@@ -212,6 +284,19 @@ pub fn execute() -> Result<i32, String> {
             }
             ToolchainCommand::Remove { version } => {
                 crate::toolchain::remove(&version)?;
+                Ok(0)
+            }
+            ToolchainCommand::Compiler { variant } => {
+                match variant {
+                    Some(variant) => {
+                        crate::toolchain::set_compiler_variant(variant)?;
+                        println!("Using the {variant} compiler variant.");
+                    }
+                    None => {
+                        println!("Compiler variant: {}", crate::toolchain::compiler_variant()?);
+                    }
+                }
+
                 Ok(0)
             }
         },

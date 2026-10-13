@@ -56,6 +56,43 @@ pub struct ProjectConfiguration {
 #[serde(deny_unknown_fields)]
 pub struct ToolchainConfiguration {
     pub version: semver::Version,
+    #[serde(default, rename = "compiler-variant")]
+    compiler_variant: Option<crate::variant::CompilerVariant>,
+}
+
+impl ToolchainConfiguration {
+    pub fn new(
+        version: semver::Version,
+        compiler_variant: Option<crate::variant::CompilerVariant>,
+    ) -> Self {
+        Self {
+            version,
+            compiler_variant,
+        }
+    }
+}
+
+impl ToolchainConfiguration {
+    pub fn get_compiler_variant(&self) -> Option<crate::variant::CompilerVariant> {
+        self.compiler_variant
+    }
+}
+
+impl ToolchainConfiguration {
+    pub fn get_compiler_variant_mut(
+        &mut self,
+    ) -> &mut Option<crate::variant::CompilerVariant> {
+        &mut self.compiler_variant
+    }
+}
+
+impl ToolchainConfiguration {
+    pub fn set_compiler_variant(
+        &mut self,
+        compiler_variant: Option<crate::variant::CompilerVariant>,
+    ) {
+        self.compiler_variant = compiler_variant;
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -142,6 +179,7 @@ project:
 
 toolchain:
   version: {version}
+  # compiler-variant: release # release | stripped
 
 sources:
   directory: {sources_directory}
@@ -323,4 +361,63 @@ fn validate(root: &std::path::Path, manifest: &Manifest) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::variant::CompilerVariant;
+
+    #[test]
+    fn constructs_toolchain_configuration() {
+        let configuration: ToolchainConfiguration = ToolchainConfiguration::new(
+            semver::Version::new(0, 2, 4),
+            Some(CompilerVariant::Stripped),
+        );
+
+        assert_eq!(configuration.version, semver::Version::new(0, 2, 4));
+        assert_eq!(
+            configuration.get_compiler_variant(),
+            Some(CompilerVariant::Stripped)
+        );
+    }
+
+    #[test]
+    fn parses_stripped_compiler_variant() {
+        let configuration: ToolchainConfiguration =
+            serde_yaml::from_str("version: 0.2.4\ncompiler-variant: stripped\n").unwrap();
+
+        assert_eq!(
+            configuration.get_compiler_variant(),
+            Some(CompilerVariant::Stripped)
+        );
+    }
+
+    #[test]
+    fn defaults_compiler_variant_to_none() {
+        let configuration: ToolchainConfiguration =
+            serde_yaml::from_str("version: 0.2.4\n").unwrap();
+
+        assert_eq!(configuration.get_compiler_variant(), None);
+    }
+
+    #[test]
+    fn sets_compiler_variant() {
+        let mut configuration: ToolchainConfiguration =
+            serde_yaml::from_str("version: 0.2.4\n").unwrap();
+
+        configuration.set_compiler_variant(Some(CompilerVariant::Release));
+
+        assert_eq!(
+            configuration.get_compiler_variant(),
+            Some(CompilerVariant::Release)
+        );
+
+        *configuration.get_compiler_variant_mut() = Some(CompilerVariant::Stripped);
+
+        assert_eq!(
+            configuration.get_compiler_variant(),
+            Some(CompilerVariant::Stripped)
+        );
+    }
 }

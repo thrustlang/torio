@@ -16,25 +16,35 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::variant::CompilerVariant;
 use crate::{commands, config};
 
 pub fn execute(
     profile: config::BuildProfile,
     command_line_cc_args: Vec<String>,
+    command_line_compiler_variant: Option<CompilerVariant>,
     arguments: Vec<std::ffi::OsString>,
 ) -> Result<i32, String> {
-    let output: commands::build::BuildOutput =
-        commands::build::compile(profile, command_line_cc_args)?;
+    let output: commands::build::BuildOutput = commands::build::compile(
+        profile,
+        command_line_cc_args,
+        command_line_compiler_variant,
+    )?;
 
-    if output.project_type != config::ProjectType::Executable {
+    if output.get_project_type() != config::ProjectType::Executable {
         return Err("'torio run' is only available for executable projects.".into());
     }
 
-    let status: std::process::ExitStatus = std::process::Command::new(&output.artifact)
+    let status: std::process::ExitStatus = std::process::Command::new(output.get_artifact())
         .args(arguments)
-        .current_dir(&output.project_root)
+        .current_dir(output.get_project_root())
         .status()
-        .map_err(|error| format!("Cannot execute '{}': {error}.", output.artifact.display()))?;
+        .map_err(|error| {
+            format!(
+                "Cannot execute '{}': {error}.",
+                output.get_artifact().display()
+            )
+        })?;
 
     Ok(status.code().unwrap_or(1))
 }

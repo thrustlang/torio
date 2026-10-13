@@ -1,3 +1,12 @@
+[build]
+rustflags = [
+    "-A", "missing_abi",
+    "-A", "dead_code",
+    "-A", "clippy::enum_variant_names",
+    "-A", "elided_lifetimes_in_paths",
+    "-A", "clippy::new_without_default"
+]
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
 
